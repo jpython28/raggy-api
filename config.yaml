@@ -4,3 +4,9 @@ database:
 ingestion:
   chunk_size: 512
   chunk_overlap: 128
+
+llm:
+  max_prompt_length: 1024
+  base_url: "https://api.mistral.ai/v1"
+  model: "mistral-medium-3-5"
+  instructions: "You are a helpful assistant."
