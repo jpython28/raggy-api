@@ -3,7 +3,8 @@ import chromadb
 import uuid
 import yaml
 import openai
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Depends
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
 with open("config.yaml", "r") as f:
@@ -17,9 +18,18 @@ base_url = config["llm"]["base_url"]
 model = config["llm"]["model"]
 model_instructions = config["llm"]["instructions"]
 
+openai_api_key = os.environ.get("OPENAI_API_KEY")
+api_key = os.environ.get("API_KEY")
+
+if openai_api_key is None:
+    raise OSError("No api key found at environment variable OPENAI_API_KEY.")
+
+if openai_api_key is None:
+    raise OSError("No api key found at environment variable API_KEY.")
+
 openai_client = openai.OpenAI(
     base_url=base_url,
-    api_key = os.environ.get("OPENAI_API_KEY"),
+    api_key = openai_api_key,
 )
 
 class Document(BaseModel):
@@ -38,12 +48,16 @@ class Response(BaseModel):
 
 app = FastAPI()
 
+header_scheme = APIKeyHeader(name="api-key", auto_error=True)
+
 client = chromadb.PersistentClient(path=db_path)
 
 collection = client.get_or_create_collection("documents")
 
 @app.post("/documents", response_model=IngestionResponse, status_code=status.HTTP_201_CREATED)
-def ingest(document: Document):
+def ingest(document: Document, key: str=Depends(header_scheme)):
+    if key != api_key:
+        raise HTTPException(401, "Invalid api key")
     text = document.text
     if text.strip() == "":
         raise HTTPException(422, "text is empty or whitespace")
@@ -64,20 +78,30 @@ def ingest(document: Document):
 
 
 @app.post("/query", response_model=Response, status_code=status.HTTP_200_OK)
-def query(query: Query):
+def query(query: Query, key: str=Depends(header_scheme)):
+    print(key, api_key)
+    if key != api_key:
+        raise HTTPException(401, "Invalid api key")
     prompt = query.prompt
     if prompt.strip() == "":
         raise HTTPException(422, "prompt is empty or whitespace")
     if len(prompt) > max_prompt_length:
         raise HTTPException(422, f"max prompt length exceeded ({max_prompt_length})")
     context_docs = collection.query(query_texts=[prompt])["documents"][0]
-    response = openai_client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": model_instructions},
-            {"role": "user", "content": f"{prompt}\nRespond based on the following context:\n{"\n".join(context_docs)}"}
-        ]
-    )
+    try:
+        response = openai_client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": model_instructions},
+                {"role": "user", "content": f"{prompt}\nRespond based on the following context:\n{"\n".join(context_docs)}"}
+            ]
+        )
+    except openai.AuthenticationError:
+        raise HTTPException(503, "Server has invalid api key for LLM")
+    except openai.RateLimitError:
+        raise HTTPException(429, "Rate Limit Exceeded")
+    except:
+        raise HTTPException(503, f"Unknown problem with openai or {base_url}")
     return {
         "content": response.choices[0].message.content,
     }
