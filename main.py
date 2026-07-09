@@ -18,13 +18,16 @@ base_url = config["llm"]["base_url"]
 model = config["llm"]["model"]
 model_instructions = config["llm"]["instructions"]
 
+if chunk_overlap >= chunk_size:
+    raise ValueError("chunk_overlap must be less than chunk_size")
+
 openai_api_key = os.environ.get("OPENAI_API_KEY")
 api_key = os.environ.get("API_KEY")
 
 if openai_api_key is None:
     raise OSError("No api key found at environment variable OPENAI_API_KEY.")
 
-if openai_api_key is None:
+if api_key is None:
     raise OSError("No api key found at environment variable API_KEY.")
 
 openai_client = openai.OpenAI(
@@ -57,7 +60,7 @@ collection = client.get_or_create_collection("documents")
 @app.post("/documents", response_model=IngestionResponse, status_code=status.HTTP_201_CREATED)
 def ingest(document: Document, key: str=Depends(header_scheme)):
     if key != api_key:
-        raise HTTPException(401, "Invalid api key")
+        raise HTTPException(403, "Invalid api key")
     text = document.text
     if text.strip() == "":
         raise HTTPException(422, "text is empty or whitespace")
@@ -79,9 +82,8 @@ def ingest(document: Document, key: str=Depends(header_scheme)):
 
 @app.post("/query", response_model=Response, status_code=status.HTTP_200_OK)
 def query(query: Query, key: str=Depends(header_scheme)):
-    print(key, api_key)
     if key != api_key:
-        raise HTTPException(401, "Invalid api key")
+        raise HTTPException(403, "Invalid api key")
     prompt = query.prompt
     if prompt.strip() == "":
         raise HTTPException(422, "prompt is empty or whitespace")
