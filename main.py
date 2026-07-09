@@ -10,7 +10,6 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from pythonjsonlogger.json import JsonFormatter
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 handler = logging.StreamHandler()
@@ -122,7 +121,7 @@ def query(query: Query, key: str=Depends(header_scheme)):
         raise HTTPException(422, "prompt is empty or whitespace")
     if len(prompt) > max_prompt_length:
         raise HTTPException(422, f"max prompt length exceeded ({max_prompt_length})")
-    logger.debug("Querying chroma database", extra={"prompt": prompt})
+    logger.debug("Querying chroma database")
     query_result = collection.query(query_texts=[prompt])
     chunks = query_result["documents"][0]
     distances = query_result["distances"][0]
