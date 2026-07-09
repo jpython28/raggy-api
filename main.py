@@ -8,9 +8,15 @@ import time
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
+from pythonjsonlogger.json import JsonFormatter
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(asctime)s %(name)s: %(message)s")
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+handler = logging.StreamHandler()
+handler.setFormatter(JsonFormatter())
+
+logger.addHandler(handler)
 
 with open("config.yaml", "r") as f:
     config = yaml.safe_load(f)
@@ -116,7 +122,7 @@ def query(query: Query, key: str=Depends(header_scheme)):
         raise HTTPException(422, "prompt is empty or whitespace")
     if len(prompt) > max_prompt_length:
         raise HTTPException(422, f"max prompt length exceeded ({max_prompt_length})")
-    logging.debug("Querying chroma database", extra={"prompt": prompt})
+    logger.debug("Querying chroma database", extra={"prompt": prompt})
     query_result = collection.query(query_texts=[prompt])
     chunks = query_result["documents"][0]
     distances = query_result["distances"][0]
@@ -135,6 +141,7 @@ def query(query: Query, key: str=Depends(header_scheme)):
             ]
         )
     except openai.AuthenticationError:
+        logger.critical("openai api key is invalid")
         raise HTTPException(503, "Server has invalid api key for LLM")
     except openai.RateLimitError:
         logger.warning("openai rate limit exceeded")
@@ -142,7 +149,7 @@ def query(query: Query, key: str=Depends(header_scheme)):
     except openai.APITimeoutError:
         logger.warning("openai timeout exceeded")
         raise HTTPException(504, f"openai timeout exceeded ({openai_timeout} secs)")
-    except:
+    except Exception:
         logger.error("openai call failed for unknown reason")
         raise HTTPException(503, f"Unknown problem with openai or {base_url}")
     logger.info("Query handled", extra={"chunks_used": len(context_chunks), "latency": time.perf_counter()-start_time})
@@ -156,7 +163,7 @@ def get_health():
     chroma_status = "ok"
     try:
         chroma_client.heartbeat()
-    except:
+    except Exception:
         logger.critical("Chroma database unreachable")
         chroma_status = "unreachable"
     logger.info("Health checked")
