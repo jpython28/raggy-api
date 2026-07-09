@@ -4,9 +4,12 @@ database:
 ingestion:
   chunk_size: 512
   chunk_overlap: 128
+  max_ingestion_characters: 200000
 
 llm:
   max_prompt_length: 1024
   base_url: "https://api.mistral.ai/v1"
   model: "mistral-medium-3-5"
-  instructions: "You are a helpful assistant."
+  instructions: "You are a question answering chatbot for the Saucon Valley Farmers' Market. Answer the user's questions based on the context provided, but don't mention that context was provided in your response. If no relevant context is found, say that you don't have access to enough information to answer the question."
+  similarity_threshold: 1.0
+  openai_timeout: 10.0
