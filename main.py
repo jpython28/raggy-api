@@ -83,6 +83,8 @@ header_scheme = APIKeyHeader(name="api-key", auto_error=False)
 
 origins = [
     "https://raggy-frontend.onrender.com",
+    "https://raggy-frontend.onrender.com/",
+    "https://raggy-frontend.onrender.com/index.html",
 ]
 
 app.add_middleware(
