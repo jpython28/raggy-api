@@ -5,6 +5,7 @@ import yaml
 import openai
 import logging
 import time
+import copy
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
@@ -62,10 +63,10 @@ class IngestionResponse(BaseModel):
     status: str
 
 class Query(BaseModel):
-    prompt: str
+    chat: list[dict[str, str]]
 
 class QueryResponse(BaseModel):
-    content: str
+    chat: list[dict[str, str]]
     chunks_used: int
 
 class HealthSummary(BaseModel):
@@ -116,7 +117,14 @@ def query(query: Query, key: str=Depends(header_scheme)):
     if key != api_key:
         logger.warning("Invalid or missing API key received")
         raise HTTPException(401, "Invalid or missing api key")
-    prompt = query.prompt
+    chat = query.chat
+    if len(chat) == 0:
+        raise HTTPException(422, "recieved empty chat")
+    if chat[-1]["role"] != "user":
+        raise HTTPException(422, "most recent message not from user")
+    if len(chat) == 1:
+        chat.insert(0, {"role": "system", "content": model_instructions})
+    prompt = chat[-1]["content"]
     if prompt.strip() == "":
         raise HTTPException(422, "prompt is empty or whitespace")
     if len(prompt) > max_prompt_length:
@@ -131,13 +139,13 @@ def query(query: Query, key: str=Depends(header_scheme)):
     else:
         context_prompt = f"{prompt}\nNo relevant context was found."
         logger.warning("No chunks cleared similarity threshold")
+    context_chat = copy.deepcopy(chat)
+    context_chat[-1]["content"] = context_prompt
+    print(chat[-1])
     try:
         response = openai_client.chat.completions.create(
             model=model,
-            messages=[
-                {"role": "system", "content": model_instructions},
-                {"role": "user", "content": context_prompt}
-            ]
+            messages=context_chat,
         )
     except openai.AuthenticationError:
         logger.critical("openai api key is invalid")
@@ -152,8 +160,9 @@ def query(query: Query, key: str=Depends(header_scheme)):
         logger.error("openai call failed for unknown reason")
         raise HTTPException(503, f"Unknown problem with openai or {base_url}")
     logger.info("Query handled", extra={"chunks_used": len(context_chunks), "latency": time.perf_counter()-start_time})
+    chat.append({"role": "assistant", "content": response.choices[0].message.content})
     return {
-        "content": response.choices[0].message.content,
+        "chat": chat,
         "chunks_used": len(context_chunks),
     }
 
