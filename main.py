@@ -8,6 +8,7 @@ import time
 import copy
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.security import APIKeyHeader
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pythonjsonlogger.json import JsonFormatter
 
@@ -79,6 +80,18 @@ class HealthSummary(BaseModel):
 app = FastAPI()
 
 header_scheme = APIKeyHeader(name="api-key", auto_error=False)
+
+origins = [
+    "*"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 chroma_client = chromadb.PersistentClient(path=db_path)
 
