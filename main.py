@@ -82,7 +82,7 @@ app = FastAPI()
 header_scheme = APIKeyHeader(name="api-key", auto_error=False)
 
 origins = [
-    "*"
+    "https://raggy-frontend.onrender.com",
 ]
 
 app.add_middleware(
