@@ -25,6 +25,8 @@ db_path = config["database"]["path"]
 chunk_size = config["ingestion"]["chunk_size"]
 chunk_overlap = config["ingestion"]["chunk_overlap"]
 max_ingestion_characters = config["ingestion"]["max_ingestion_characters"]
+duplicate_similarity_threshold = config["ingestion"]["duplicate_similarity_threshold"]
+max_duplicate_chunks = config["ingestion"]["max_duplicate_chunks"]
 max_prompt_length = config["llm"]["max_prompt_length"]
 base_url = config["llm"]["base_url"]
 model = config["llm"]["model"]
@@ -95,8 +97,15 @@ def ingest(document: Document, key: str=Depends(header_scheme)):
     if text.strip() == "":
         raise HTTPException(422, "text is empty or whitespace")
     chunks = []
+    duplicate_chunks = 0
     for i in range(0, len(text), chunk_size-chunk_overlap):
-        chunks.append(text[i:min(len(text), i+chunk_size)])
+        new_chunk = text[i:min(len(text), i+chunk_size)]
+        query_result = collection.query(query_texts=[new_chunk])
+        if min(query_result["distances"][0]) < duplicate_similarity_threshold:
+            duplicate_chunks += 1
+        chunks.append(new_chunk)
+    if duplicate_chunks > max_duplicate_chunks:
+        raise HTTPException(422, "Duplicate document detected")
     document_id = str(uuid.uuid4())
     collection.add(
         ids=list([str(uuid.uuid4()) for _ in range(len(chunks))]),
