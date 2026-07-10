@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from pythonjsonlogger.json import JsonFormatter
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 handler = logging.StreamHandler()
 handler.setFormatter(JsonFormatter())
@@ -97,13 +98,15 @@ def ingest(document: Document, key: str=Depends(header_scheme)):
     if text.strip() == "":
         raise HTTPException(422, "text is empty or whitespace")
     chunks = []
-    duplicate_chunks = 0
     for i in range(0, len(text), chunk_size-chunk_overlap):
-        new_chunk = text[i:min(len(text), i+chunk_size)]
-        query_result = collection.query(query_texts=[new_chunk])
-        if min(query_result["distances"][0]) < duplicate_similarity_threshold:
-            duplicate_chunks += 1
-        chunks.append(new_chunk)
+        chunks.append(text[i:min(len(text), i+chunk_size)])
+    duplicate_chunks = 0
+    if collection.count() > 0:
+        query_result = collection.query(query_texts=chunks)
+        min_distances = [min(i) for i in query_result["distances"]]
+        for distance in min_distances:
+            if distance < duplicate_similarity_threshold:
+                duplicate_chunks += 1
     if duplicate_chunks > max_duplicate_chunks:
         raise HTTPException(422, "Duplicate document detected")
     document_id = str(uuid.uuid4())
@@ -150,7 +153,6 @@ def query(query: Query, key: str=Depends(header_scheme)):
         logger.warning("No chunks cleared similarity threshold")
     context_chat = copy.deepcopy(chat)
     context_chat[-1]["content"] = context_prompt
-    print(chat[-1])
     try:
         response = openai_client.chat.completions.create(
             model=model,
