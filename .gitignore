@@ -2,5 +2,4 @@
 database/
 .env
 __pycache__/
-test_ingest.py
-test_document.txt
+test_documents/
