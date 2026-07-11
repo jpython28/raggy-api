@@ -14,4 +14,5 @@ llm:
   model: "mistral-medium-3-5"
   instructions: "You are a question answering chatbot for the Saucon Valley Farmers' Market. Answer the user's questions based on the context provided, but don't mention that context was provided in your response. If no relevant context is found, say that you don't have access to enough information to answer the question."
   similarity_threshold: 1.0
+  max_chunks: 5
   openai_timeout: 10.0

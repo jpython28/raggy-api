@@ -34,6 +34,7 @@ base_url = config["llm"]["base_url"]
 model = config["llm"]["model"]
 model_instructions = config["llm"]["instructions"]
 similarity_threshold = config["llm"]["similarity_threshold"]
+max_chunks = config["llm"]["max_chunks"]
 openai_timeout = config["llm"]["openai_timeout"]
 
 logger.debug("Config loaded", extra=config)
@@ -111,7 +112,7 @@ def ingest(document: Document, key: str=Depends(header_scheme)):
     if len(text) > max_ingestion_characters:
         raise HTTPException(422, f"Document exceeds character limit ({max_ingestion_characters})")
     if text.strip() == "":
-        raise HTTPException(422, "text is empty or whitespace")
+        raise HTTPException(422, "Document is empty or whitespace")
     chunks = []
     for i in range(0, len(text), chunk_size-chunk_overlap):
         chunks.append(text[i:min(len(text), i+chunk_size)])
@@ -146,18 +147,18 @@ def query(query: Query, key: str=Depends(header_scheme)):
         raise HTTPException(401, "Invalid or missing api key")
     chat = query.chat
     if len(chat) == 0:
-        raise HTTPException(422, "recieved empty chat")
+        raise HTTPException(422, "Recieved empty chat")
     if chat[-1]["role"] != "user":
-        raise HTTPException(422, "most recent message not from user")
+        raise HTTPException(422, "Most recent message not from user")
     if len(chat) == 1:
         chat.insert(0, {"role": "system", "content": model_instructions})
     prompt = chat[-1]["content"]
     if prompt.strip() == "":
-        raise HTTPException(422, "prompt is empty or whitespace")
+        raise HTTPException(422, "Prompt is empty or whitespace")
     if len(prompt) > max_prompt_length:
         raise HTTPException(422, f"max prompt length exceeded ({max_prompt_length})")
     logger.debug("Querying chroma database")
-    query_result = collection.query(query_texts=[prompt])
+    query_result = collection.query(query_texts=[prompt], n_results=max_chunks)
     chunks = query_result["documents"][0]
     distances = query_result["distances"][0]
     context_chunks = list([chunks[i] for i in range(len(chunks)) if distances[i] <= similarity_threshold])
